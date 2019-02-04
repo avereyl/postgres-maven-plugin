@@ -5,7 +5,7 @@ package fr.avereyl.tools;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.net.ServerSocket;
+import java.util.Map;
 
 /**
  * @author guillaume
@@ -13,12 +13,8 @@ import java.net.ServerSocket;
  */
 public interface EmbeddedServer extends Closeable {
 
-	EmbeddedServer start() throws IOException;
+	EmbeddedServer start(Map<String, String> connectionConfig) throws IOException;
 
-	
-	default int detectPort() throws IOException {
-		try (ServerSocket socket = new ServerSocket(0)) {
-			return socket.getLocalPort();
-		}
-	}
+	boolean isCleaningDataDirectoryBeforeStartRequired();
+	boolean isCleaningDataDirectoryAfterStopRequired();
 }
