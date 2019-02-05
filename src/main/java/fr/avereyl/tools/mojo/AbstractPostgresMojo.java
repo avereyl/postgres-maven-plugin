@@ -16,17 +16,11 @@ import fr.avereyl.tools.EmbeddedServer;
  */
 public abstract class AbstractPostgresMojo extends AbstractMojo {
 
-	/**
-     * The address to bind POSTGRES on.
-     */
-    @Parameter(property = "postgres.address", defaultValue = "localhost")
-    public String address;
-
     /**
      * The port to start POSTGRES on.
      */
-    @Parameter(property = "postgres.port", defaultValue = "5432")
-    public int port;
+    @Parameter(property = "postgres.port")
+    public int port = 0;
 
     /**
      * The schema to use for the database.
@@ -41,10 +35,15 @@ public abstract class AbstractPostgresMojo extends AbstractMojo {
     public String name;
 
     /**
-     * The path to use for the database.
+     * The directory where storing postgres engine.
      */
-    @Parameter(property = "postgres.path", defaultValue = "target/postgresdb")
-    public String path;
+    @Parameter(property = "postgres.pgdir", defaultValue = "target/postgresdb")
+    public String pgdir;
+    /**
+     * The directory where storing data.
+     */
+    @Parameter(property = "postgres.datadir", defaultValue = "target/postgresdb/data")
+    public String datadir;
 
     /**
      * The username to use when authenticating.

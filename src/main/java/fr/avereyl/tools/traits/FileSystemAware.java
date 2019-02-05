@@ -17,7 +17,9 @@ public interface FileSystemAware {
 
 	/**
 	 * Create the given directory. (Do nothing if the directory already exists)
-	 * @param directory to be created.
+	 * 
+	 * @param directory
+	 *            to be created.
 	 */
 	default void mkdirs(File directory) {
 		if (!directory.mkdirs() && !(directory.isDirectory() && directory.exists())) {

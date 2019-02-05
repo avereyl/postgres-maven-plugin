@@ -15,6 +15,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import fr.avereyl.tools.postgres.PostgresEmbeddedServer;
 
 /**
+ * 
  * @author guillaume
  *
  */
@@ -28,17 +29,21 @@ public class StartPostgresMojo extends AbstractPostgresMojo {
 	 */
 	@Override
 	protected void doExecute() throws MojoExecutionException, MojoFailureException {
-		// TODO fail if already running...
 		try {
 			server = PostgresEmbeddedServer.builder()
-					//TODO build server according mojo parameter
-			.build();
+					// build server according mojo parameters
+					.port(this.port)
+					.pgdir(this.pgdir)
+					.datadir(this.datadir)
+					//.config("key", "value")
+					.build();
 			Map<String, String> connectionConfig = new HashMap<>();
+			
 			//TODO add connection config from mojo parameter
 			server.start(connectionConfig);
 		} catch (IOException e) {
-			getLog().error("");
-			throw new MojoExecutionException("", e);
+			getLog().error(e.getMessage());
+			throw new MojoExecutionException("Unable to start the server.", e);
 		}
 	}
 

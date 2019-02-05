@@ -14,6 +14,9 @@ import java.util.Map;
 public interface EmbeddedServer extends Closeable {
 
 	EmbeddedServer start(Map<String, String> connectionConfig) throws IOException;
+	default void stop() throws IOException {
+		close();
+	}
 
 	boolean isCleaningDataDirectoryBeforeStartRequired();
 	boolean isCleaningDataDirectoryAfterStopRequired();

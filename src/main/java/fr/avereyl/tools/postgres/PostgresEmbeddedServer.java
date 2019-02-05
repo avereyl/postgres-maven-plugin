@@ -10,6 +10,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.channels.FileLock;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -91,12 +93,13 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 	private boolean cleanDataDirectoryAfterClosing;
 	private boolean cleanDataDirectoryBeforeStarting;
 
-	private PostgresEmbeddedServer(PostgresEmbeddedServer.Builder builder) {
+	private PostgresEmbeddedServer(PostgresEmbeddedServer.Builder builder) throws IOException {
 		// set fields from builder operations
 		builder.operations.forEach(op -> op.accept(this));
 
 		// check for missing mandatory parameters
-
+		this.port = this.port <= 0 ? OperatingSystemAware.detectPort() : this.port;
+		this.pgStartupWait = this.pgStartupWait == null ? DEFAULT_PG_STARTUP_WAIT : this.pgStartupWait;
 		//
 		lockFile = new File(this.dataDirectory, LOCK_FILE_NAME);
 
@@ -134,14 +137,36 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 		private final List<Consumer<PostgresEmbeddedServer>> operations = new ArrayList<>();
 
 		private Builder() {
+			config("timezone", "UTC");
+            config("synchronous_commit", "off");
+            config("max_connections", "300");
 		}
 
-		public PostgresEmbeddedServer build() {
+		public PostgresEmbeddedServer build() throws IOException {
 			return new PostgresEmbeddedServer(this);
 		}
+
+		public Builder port(Integer port) {
+			this.operations.add(server -> server.port = port);
+			return this;
+		}
+		public Builder pgdir(String pgdir) {
+			this.operations.add(server -> server.overriddenWorkingDirectory = Optional.of(Paths.get(pgdir).toFile()));
+			return this;
+		}
+		public Builder datadir(String datadir) {
+			this.operations.add(server -> server.dataDirectory = Paths.get(datadir).toFile());
+			return this;
+		}
+		public Builder config(String key, String value) {
+			this.operations.add(server -> server.postgresConfig.put(key, value));
+			return null;
+		}
+		
 	}
 
 	public EmbeddedServer start(Map<String, String> connectionConfig) throws IOException {
+		Objects.requireNonNull(this.pgStartupWait, "Wait time cannot be null");
 		// clean data (if needed) TODO integrate property access in builder
 		if (cleanDataDirectoryBeforeStarting && System.getProperty("pmp.no-cleanup") == null) {
 			try {

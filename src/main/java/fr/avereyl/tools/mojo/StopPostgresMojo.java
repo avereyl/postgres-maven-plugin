@@ -11,6 +11,7 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 
 /**
+ * 
  * @author guillaume
  *
  */
@@ -24,15 +25,11 @@ public class StopPostgresMojo extends AbstractPostgresMojo {
 	 */
 	@Override
 	protected void doExecute() throws MojoExecutionException, MojoFailureException {
-		// TODO fail if not running...
 		try {
-			
 			server.close();
-			
-			//TODO clean up if needed ..
 		} catch (IOException e) {
-			getLog().error("");
-			throw new MojoExecutionException("", e);
+			getLog().error(e.getMessage());
+			throw new MojoExecutionException("Unable to stop the server.", e);
 		}
 	}
 

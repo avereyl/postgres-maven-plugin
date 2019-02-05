@@ -31,7 +31,7 @@ public interface OperatingSystemAware {
 		throw new UnsupportedOperationException("Unknown OS " + SystemUtils.OS_NAME);
 	}
 
-	default int detectPort() throws IOException {
+	static int detectPort() throws IOException {
 		try (ServerSocket socket = new ServerSocket(0)) {
 			return socket.getLocalPort();
 		}
