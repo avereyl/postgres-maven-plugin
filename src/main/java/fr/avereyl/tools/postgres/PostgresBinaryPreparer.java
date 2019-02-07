@@ -1,7 +1,22 @@
-/**
- * 
- */
+/*******************************************************************************
+ * Copyright 2019 the original author or authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License.  You may obtain a copy
+ * of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ ******************************************************************************/
 package fr.avereyl.tools.postgres;
+
+import static java.nio.file.StandardOpenOption.CREATE_NEW;
+import static java.nio.file.StandardOpenOption.WRITE;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -37,13 +52,9 @@ import fr.avereyl.tools.traits.FileSystemAware;
 import fr.avereyl.tools.traits.OperatingSystemAware;
 import lombok.extern.slf4j.Slf4j;
 
-
-import static java.nio.file.StandardOpenOption.CREATE_NEW;
-import static java.nio.file.StandardOpenOption.WRITE;
-
 /**
  * Class responsible for extracting (if needed) POSGRES binaries.
- * 
+ *
  * @author guillaume
  *
  */
@@ -54,7 +65,7 @@ public class PostgresBinaryPreparer implements OperatingSystemAware, FileSystemA
 	private static final Lock BINARIES_PREPARATION_LOCK = new ReentrantLock();
 	private static final Map<PostgresBinaryResolver, File> PREPARED_BINARIES = new HashMap<>();
 
-	public File prepare(PostgresBinaryResolver binaryResolver, Optional<File> overriddenWorkingDirectory) {
+	public File prepare(final PostgresBinaryResolver binaryResolver, final Optional<File> overriddenWorkingDirectory) {
 		BINARIES_PREPARATION_LOCK.lock();
 		try {
 			// binaries already prepared -> return POSTGRES folder
@@ -62,8 +73,8 @@ public class PostgresBinaryPreparer implements OperatingSystemAware, FileSystemA
 				return PREPARED_BINARIES.get(binaryResolver);
 			}
 			// preparing binaries...
-			final String system = getOS();
-			final String machineHardware = getArchitecture();
+			final String system = this.getOS();
+			final String machineHardware = this.getArchitecture();
 			log.info("Detected a {} {} system.", system, machineHardware);
 			// getting binary stream for the detected system (through the resolver)
 			final InputStream postgresBinaryStream;
@@ -83,37 +94,37 @@ public class PostgresBinaryPreparer implements OperatingSystemAware, FileSystemA
 					ByteArrayOutputStream binaryCopyOutputStream = new ByteArrayOutputStream()) {
 				IOUtils.copy(postgresArchiveData, binaryCopyOutputStream);
 
-				String postgresDigest = Hex.encodeHexString(postgresArchiveData.getMessageDigest().digest());
-				File workingDirectory = overriddenWorkingDirectory.isPresent() ? overriddenWorkingDirectory.get()
-						: getWorkingDirectory();
+				final String postgresDigest = Hex.encodeHexString(postgresArchiveData.getMessageDigest().digest());
+				final File workingDirectory = overriddenWorkingDirectory.isPresent() ? overriddenWorkingDirectory.get()
+						: this.getWorkingDirectory();
 				postgresDirectory = new File(workingDirectory, String.format("PG-%s", postgresDigest));
 				// creating the directory where to extract POSTGRES binaries (nothing done if
 				// directory already exists)
-				mkdirs(postgresDirectory);
+				this.mkdirs(postgresDirectory);
 				final File unpackLockFile = new File(postgresDirectory, LOCK_FILE_NAME);
 				final File postgresDirectoryExists = new File(postgresDirectory, ".exists");
 				// only in case no .exists file present in the directory
 				if (!postgresDirectoryExists.exists()) {
-					unpack(binaryCopyOutputStream, postgresDirectory, unpackLockFile, postgresDirectoryExists);
+					this.unpack(binaryCopyOutputStream, postgresDirectory, unpackLockFile, postgresDirectoryExists);
 				}
-            } catch (final IOException | NoSuchAlgorithmException e) {
-                throw new ExceptionInInitializerError(e);
-            } catch (final InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                throw new ExceptionInInitializerError(ie);
-            }
-			
-            PREPARED_BINARIES.put(binaryResolver, postgresDirectory);
-            log.info("Postgres binaries at {}", postgresDirectory);
-            return postgresDirectory;
-            
-        } finally {
-        	BINARIES_PREPARATION_LOCK.unlock();
-        }
+			} catch (final IOException | NoSuchAlgorithmException e) {
+				throw new ExceptionInInitializerError(e);
+			} catch (final InterruptedException ie) {
+				Thread.currentThread().interrupt();
+				throw new ExceptionInInitializerError(ie);
+			}
+
+			PREPARED_BINARIES.put(binaryResolver, postgresDirectory);
+			log.info("Postgres binaries at {}", postgresDirectory);
+			return postgresDirectory;
+
+		} finally {
+			BINARIES_PREPARATION_LOCK.unlock();
+		}
 	}
 
-	private void unpack(ByteArrayOutputStream binaryCopyOutputStream,final File postgresDirectory,  final File unpackLockFile, final File postgresDirectoryExists)
-			throws InterruptedException, IOException {
+	private void unpack(final ByteArrayOutputStream binaryCopyOutputStream, final File postgresDirectory,
+			final File unpackLockFile, final File postgresDirectoryExists) throws InterruptedException, IOException {
 		try (FileOutputStream lockStream = new FileOutputStream(unpackLockFile);
 				FileLock unpackLock = lockStream.getChannel().tryLock()) {
 			if (unpackLock != null) {
@@ -125,12 +136,12 @@ public class PostgresBinaryPreparer implements OperatingSystemAware, FileSystemA
 					}
 					log.info("Extracting POSTGRES...");
 					try (ByteArrayInputStream bais = new ByteArrayInputStream(binaryCopyOutputStream.toByteArray())) {
-						extractTxz(bais, postgresDirectory.getPath());
+						this.extractTxz(bais, postgresDirectory.getPath());
 					}
 					if (!postgresDirectoryExists.createNewFile()) {
 						throw new IllegalStateException("couldn't make .exists file " + postgresDirectoryExists);
 					}
-				} catch (Exception e) {
+				} catch (final Exception e) {
 					log.error("while unpacking Postgres", e);
 				}
 			} else {
@@ -151,14 +162,16 @@ public class PostgresBinaryPreparer implements OperatingSystemAware, FileSystemA
 		}
 	}
 
-	   /**
-     * Unpack archive compressed by tar with xz compression. By default system tar is used (faster). If not found, then the
-     * java implementation takes place.
-     *
-     * @param stream    A stream with the postgres binaries.
-     * @param targetDir The directory to extract the content to.
-     */
-	private void extractTxz(InputStream stream, String targetDir) throws IOException {
+	/**
+	 * Unpack archive compressed by tar with xz compression. By default system tar
+	 * is used (faster). If not found, then the java implementation takes place.
+	 *
+	 * @param stream
+	 *            A stream with the postgres binaries.
+	 * @param targetDir
+	 *            The directory to extract the content to.
+	 */
+	private void extractTxz(final InputStream stream, final String targetDir) throws IOException {
 		try (XZInputStream xzIn = new XZInputStream(stream);
 				TarArchiveInputStream tarIn = new TarArchiveInputStream(xzIn)) {
 			final Phaser phaser = new Phaser(1);
@@ -166,63 +179,65 @@ public class PostgresBinaryPreparer implements OperatingSystemAware, FileSystemA
 
 			while ((entry = tarIn.getNextTarEntry()) != null) {
 				final String individualFile = entry.getName();
-				final File fsObject = new File(targetDir + File.pathSeparator + individualFile);
+				final File fsObject = new File(targetDir + "/" + individualFile);
 
 				if (entry.isSymbolicLink() || entry.isLink()) {
-					Path target = FileSystems.getDefault().getPath(entry.getLinkName());
+					final Path target = FileSystems.getDefault().getPath(entry.getLinkName());
 					Files.createSymbolicLink(fsObject.toPath(), target);
 				} else if (entry.isFile()) {
-					byte[] content = new byte[(int) entry.getSize()];
-					int read = tarIn.read(content, 0, content.length);
+					final byte[] content = new byte[(int) entry.getSize()];
+					final int read = tarIn.read(content, 0, content.length);
 					if (read == -1) {
 						throw new IllegalStateException("could not read " + individualFile);
 					}
-					mkdirs(fsObject.getParentFile());
+					this.mkdirs(fsObject.getParentFile());
 
 					final AsynchronousFileChannel fileChannel = AsynchronousFileChannel.open(fsObject.toPath(),
 							CREATE_NEW, WRITE);
 					final ByteBuffer buffer = ByteBuffer.wrap(content);
 
 					phaser.register();
-					
+
 					fileChannel.write(buffer, 0, fileChannel, new CompletionHandler<Integer, Channel>() {
 						@Override
-						public void completed(Integer written, Channel channel) {
-							closeChannel(channel);
+						public void completed(final Integer written, final Channel channel) {
+							this.closeChannel(channel);
 						}
 
 						@Override
-						public void failed(Throwable error, Channel channel) {
+						public void failed(final Throwable error, final Channel channel) {
 							log.error("Could not write file {}", fsObject.getAbsolutePath(), error);
-							closeChannel(channel);
+							this.closeChannel(channel);
 						}
 
-						private void closeChannel(Channel channel) {
+						private void closeChannel(final Channel channel) {
 							try {
 								channel.close();
-							} catch (IOException e) {
+							} catch (final IOException e) {
 								log.error("Unexpected error while closing the channel", e);
 							} finally {
 								phaser.arriveAndDeregister();
 							}
 						}
 					});
-					
+
 				} else if (entry.isDirectory()) {
-					mkdirs(fsObject);
+					this.mkdirs(fsObject);
 				} else {
 					throw new UnsupportedOperationException(
 							String.format("Unsupported entry found: %s", individualFile));
 				}
 
 				if (individualFile.startsWith("bin/") || individualFile.startsWith("./bin/")) {
-					fsObject.setExecutable(true);
+					final boolean success = fsObject.setExecutable(true);
+					if (!success) {
+						log.warn("Failed to set {} executable !", individualFile);
+					}
 				}
 			}
 
 			phaser.arriveAndAwaitAdvance();
 		}
 	}
-	
-	
+
 }

@@ -1,6 +1,18 @@
-/**
- * 
- */
+/*******************************************************************************
+ * Copyright 2019 the original author or authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License.  You may obtain a copy
+ * of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ ******************************************************************************/
 package fr.avereyl.tools.postgres;
 
 import java.io.File;
@@ -63,7 +75,7 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 	 */
 	private final File postgresDirectory;
 	/**
-	 * 
+	 *
 	 */
 	private Optional<File> overriddenWorkingDirectory = Optional.empty();
 
@@ -85,7 +97,7 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 	private final Map<String, String> postgresConfig = new HashMap<>();
 	private final Map<String, String> localeConfig = new HashMap<>();
 
-	private File lockFile;
+	private final File lockFile;
 
 	private volatile FileOutputStream lockStream;
 	private volatile FileLock lock;
@@ -93,7 +105,7 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 	private boolean cleanDataDirectoryAfterClosing;
 	private boolean cleanDataDirectoryBeforeStarting;
 
-	private PostgresEmbeddedServer(PostgresEmbeddedServer.Builder builder) throws IOException {
+	private PostgresEmbeddedServer(final PostgresEmbeddedServer.Builder builder) throws IOException {
 		// set fields from builder operations
 		builder.operations.forEach(op -> op.accept(this));
 
@@ -101,24 +113,24 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 		this.port = this.port <= 0 ? OperatingSystemAware.detectPort() : this.port;
 		this.pgStartupWait = this.pgStartupWait == null ? DEFAULT_PG_STARTUP_WAIT : this.pgStartupWait;
 		//
-		lockFile = new File(this.dataDirectory, LOCK_FILE_NAME);
+		this.lockFile = new File(this.dataDirectory, LOCK_FILE_NAME);
 
 		// set fields with default values (if needed)
 		this.postgresBinaryResolver = this.postgresBinaryResolver == null ? new BundledPostgresBinaryResolver()
 				: this.postgresBinaryResolver;
 
 		// prepare POSTGRES binaries (if needed)
-		this.postgresDirectory = postgresBinaryPreparer.prepare(this.postgresBinaryResolver,
-				overriddenWorkingDirectory);
+		this.postgresDirectory = this.postgresBinaryPreparer.prepare(this.postgresBinaryResolver,
+				this.overriddenWorkingDirectory);
 
 		// clean data directories (if needed)
-		if (isCleaningDataDirectoryBeforeStartRequired()) {
-			cleanDataDirectory(this.dataDirectory);
+		if (this.isCleaningDataDirectoryBeforeStartRequired()) {
+			this.cleanDataDirectory(this.dataDirectory);
 		}
 
 		// initialize the database if no postgresql.conf file found
-		if (!new File(dataDirectory, "postgresql.conf").exists()) {
-			initDatabase();
+		if (!new File(this.dataDirectory, "postgresql.conf").exists()) {
+			this.initDatabase();
 		}
 
 	}
@@ -128,7 +140,7 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 	}
 
 	/**
-	 * 
+	 *
 	 * @author guillaume
 	 *
 	 */
@@ -137,91 +149,104 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 		private final List<Consumer<PostgresEmbeddedServer>> operations = new ArrayList<>();
 
 		private Builder() {
-			config("timezone", "UTC");
-            config("synchronous_commit", "off");
-            config("max_connections", "300");
+			this.config("timezone", "UTC");
+			this.config("synchronous_commit", "off");
+			this.config("max_connections", "300");
 		}
 
 		public PostgresEmbeddedServer build() throws IOException {
 			return new PostgresEmbeddedServer(this);
 		}
 
-		public Builder port(Integer port) {
+		public Builder port(final Integer port) {
 			this.operations.add(server -> server.port = port);
 			return this;
 		}
-		public Builder pgdir(String pgdir) {
+
+		public Builder pgdir(final String pgdir) {
 			this.operations.add(server -> server.overriddenWorkingDirectory = Optional.of(Paths.get(pgdir).toFile()));
 			return this;
 		}
-		public Builder datadir(String datadir) {
+
+		public Builder datadir(final String datadir) {
 			this.operations.add(server -> server.dataDirectory = Paths.get(datadir).toFile());
 			return this;
 		}
-		public Builder config(String key, String value) {
+
+		public Builder config(final String key, final String value) {
 			this.operations.add(server -> server.postgresConfig.put(key, value));
 			return null;
 		}
-		
+
 	}
 
-	public EmbeddedServer start(Map<String, String> connectionConfig) throws IOException {
+	@Override
+	public EmbeddedServer start(final Map<String, String> connectionConfig) throws IOException {
 		Objects.requireNonNull(this.pgStartupWait, "Wait time cannot be null");
 		// clean data (if needed) TODO integrate property access in builder
-		if (cleanDataDirectoryBeforeStarting && System.getProperty("pmp.no-cleanup") == null) {
+		if (this.cleanDataDirectoryBeforeStarting && System.getProperty("pmp.no-cleanup") == null) {
 			try {
-				FileUtils.deleteDirectory(dataDirectory);
-			} catch (IOException e) {
-				log.error("Could not clean up directory {}", dataDirectory.getAbsolutePath());
+				FileUtils.deleteDirectory(this.dataDirectory);
+			} catch (final IOException e) {
+				log.error("Could not clean up directory {}", this.dataDirectory.getAbsolutePath());
 			}
 		} else {
-			log.info("Did not clean up directory {}", dataDirectory.getAbsolutePath());
+			log.info("Did not clean up directory {}", this.dataDirectory.getAbsolutePath());
 		}
 
 		// lock !!
-		lock();
+		this.lock();
 
 		// start postgres server with the given/computed configuration
 		final StopWatch watch = new StopWatch();
 		watch.start();
-		if (started.getAndSet(true)) {
+		if (this.started.getAndSet(true)) {
 			throw new IllegalStateException("Postmaster already started");
 		}
 
 		final List<String> options = new ArrayList<>();
+
 		options.add("-o");
-		options.addAll(OperatingSystemAware.createInitOptions(port, postgresConfig));
+		options.addAll(OperatingSystemAware.createInitOptions(this.port, this.postgresConfig));
 
-		Process postmaster = postgresController.pgCtl(postgresDirectory, dataDirectory, "start", options);
-		log.info("{} postmaster started as {} on port {}.  Waiting up to {} for server startup to finish.", instanceId,
-				postmaster.toString(), port, pgStartupWait);
+		final Process postmaster = this.postgresController.pgCtl(this.postgresDirectory, this.dataDirectory, "start",
+				options);
+		log.info("{} postmaster started as {} on port {}.  Waiting up to {} for server startup to finish.",
+				this.instanceId, postmaster.toString(), this.port, this.pgStartupWait);
 
-		// add shutdown hook
-		final Thread closeThread = new Thread(() -> {
-			try {
-				PostgresEmbeddedServer.this.close();
-			} catch (IOException ex) {
-				log.error("Unexpected IOException from Closeables.close", ex);
-			}
-		});
-		closeThread.setName("postgres-" + instanceId + "-closer");
-		Runtime.getRuntime().addShutdownHook(closeThread);
-		waitForServerStartup(watch, connectionConfig);
+		// add shutdown hook (only if needed)
+		this.addShutDownHook(false);//
+		this.waitForServerStartup(watch, connectionConfig);
 		return this;
 	}
 
-	public void waitForServerStartup(StopWatch watch, Map<String, String> connectConfig) throws IOException {
+	private void addShutDownHook(final boolean shutdownHookNeeded) {
+		if (shutdownHookNeeded) {
+			final Thread closeThread = new Thread(() -> {
+				try {
+					PostgresEmbeddedServer.this.close();
+				} catch (final IOException ex) {
+					log.error("Unexpected IOException from Closeables.close", ex);
+				}
+			});
+			closeThread.setName("postgres-" + this.instanceId + "-closer");
+			Runtime.getRuntime().addShutdownHook(closeThread);
+		}
+	}
+
+	public void waitForServerStartup(final StopWatch watch, final Map<String, String> connectConfig)
+			throws IOException {
 		Throwable lastCause = null;
 		final long start = System.nanoTime();
-		final long maxWaitNs = TimeUnit.NANOSECONDS.convert(pgStartupWait.toMillis(), TimeUnit.MILLISECONDS);
+		final long maxWaitNs = TimeUnit.NANOSECONDS.convert(this.pgStartupWait.toMillis(), TimeUnit.MILLISECONDS);
 		while (System.nanoTime() - start < maxWaitNs) {
 			try {
-				verifyReady(connectConfig);
-				log.info("{} postmaster startup finished in {}", instanceId, watch);
+				this.verifyReady(connectConfig);
+				log.info("{} postmaster startup finished in {}", this.instanceId, watch);
 				return;
 			} catch (final SQLException e) {
 				lastCause = e;
-				log.trace("While waiting for server startup", e);
+				log.warn("While waiting for server startup", e);
 			}
 
 			try {
@@ -231,19 +256,20 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 				return;
 			}
 		}
-		throw new IOException("Gave up waiting for server to start after " + pgStartupWait.toMillis() + "ms",
+		throw new IOException("Gave up waiting for server to start after " + this.pgStartupWait.toMillis() + "ms",
 				lastCause);
 	}
 
-	public void verifyReady(Map<String, String> connectConfig) throws SQLException {
+	public void verifyReady(final Map<String, String> connectConfig) throws SQLException {
 		final InetAddress localhost = InetAddress.getLoopbackAddress();
 		try (Socket sock = new Socket()) {
 			sock.setSoTimeout((int) Duration.ofMillis(500).toMillis());
-			sock.connect(new InetSocketAddress(localhost, port), (int) Duration.ofMillis(500).toMillis());
+			sock.connect(new InetSocketAddress(localhost, this.port), (int) Duration.ofMillis(500).toMillis());
 		} catch (final IOException e) {
+			log.error("Socket connection failed !");
 			throw new SQLException("connect failed", e);
 		}
-		try (Connection c = getPostgresDatabase(connectConfig).getConnection();
+		try (Connection c = this.getPostgresDatabase(connectConfig).getConnection();
 				Statement s = c.createStatement();
 				ResultSet rs = s.executeQuery("SELECT 1")) {
 			if (!rs.next()) {
@@ -258,40 +284,43 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 		}
 	}
 
-	public String getJdbcUrl(String userName, String dbName) {
-		return String.format(JDBC_FORMAT, port, dbName, userName);
+	public String getJdbcUrl(final String userName, final String dbName) {
+		return String.format(JDBC_FORMAT, this.port, dbName, userName);
 	}
 
 	public DataSource getPostgresDatabase() {
-		return getDatabase(PG_SUPERUSER, "postgres");
+		return this.getDatabase(PG_SUPERUSER, "postgres");
 	}
 
-	public DataSource getPostgresDatabase(Map<String, String> properties) {
-		return getDatabase(PG_SUPERUSER, "postgres", properties);
+	public DataSource getPostgresDatabase(final Map<String, String> properties) {
+		return this.getDatabase(PG_SUPERUSER, "postgres", properties);
 	}
 
-	public DataSource getDatabase(String userName, String dbName) {
-		return getDatabase(userName, dbName, Collections.emptyMap());
+	public DataSource getDatabase(final String userName, final String dbName) {
+		return this.getDatabase(userName, dbName, Collections.emptyMap());
 	}
 
-	public DataSource getDatabase(String userName, String dbName, Map<String, String> properties) {
+	public DataSource getDatabase(final String userName, final String dbName, final Map<String, String> properties) {
 		final PGSimpleDataSource ds = new PGSimpleDataSource();
 		ds.setServerName("localhost");
-		ds.setPortNumber(port);
+		ds.setPortNumber(this.port);
 		ds.setDatabaseName(dbName);
 		ds.setUser(userName);
+
+		log.info("Trying to connect to server {} on port {} for database {} and user {}", ds.getServerName(),
+				ds.getPortNumber(), ds.getDatabaseName(), ds.getUser());
 
 		properties.forEach((propertyKey, propertyValue) -> {
 			try {
 				ds.setProperty(propertyKey, propertyValue);
-			} catch (SQLException e) {
+			} catch (final SQLException e) {
 				throw new RuntimeException(e);
 			}
 		});
 		return ds;
 	}
 
-	private void cleanDataDirectory(File parentDirectory) {
+	private void cleanDataDirectory(final File parentDirectory) {
 		// TODO Auto-generated method stub
 
 	}
@@ -299,73 +328,79 @@ public class PostgresEmbeddedServer implements EmbeddedServer {
 	private void initDatabase() {
 		final StopWatch watch = new StopWatch();
 		watch.start();
-		List<String> options = new ArrayList<>();
-		options.addAll(Arrays.asList("-A", "trust", "-U", PG_SUPERUSER, "-E", "UTF-8"));
+		final List<String> options = new ArrayList<>();
+
+		// "-U="+PG_SUPERUSER,
+		// "-E=UTF-8"
+
+		options.addAll(Arrays.asList("-A", "trust"));
 		options.addAll(OperatingSystemAware.createLocaleOptions(this.localeConfig));
-		postgresController.initDb(postgresDirectory, dataDirectory, options);
-		log.info("{} initdb completed in {}", instanceId, watch);
+		this.postgresController.initDb(this.postgresDirectory, this.dataDirectory, options);
+		log.info("{} initdb completed in {}", this.instanceId, watch);
 	}
 
 	@Override
 	public boolean isCleaningDataDirectoryBeforeStartRequired() {
-		return cleanDataDirectoryBeforeStarting;
+		return this.cleanDataDirectoryBeforeStarting;
 	}
+
 	@Override
 	public boolean isCleaningDataDirectoryAfterStopRequired() {
-		return cleanDataDirectoryAfterClosing;
+		return this.cleanDataDirectoryAfterClosing;
 	}
 
 	/**
-	 * 
+	 *
 	 * @throws IOException
 	 */
 	private void lock() throws IOException {
-		lockStream = new FileOutputStream(lockFile);
-		if ((lock = lockStream.getChannel().tryLock()) == null) {
-			throw new IllegalStateException("could not lock " + lockFile);
+		this.lockStream = new FileOutputStream(this.lockFile);
+		if ((this.lock = this.lockStream.getChannel().tryLock()) == null) {
+			throw new IllegalStateException("could not lock " + this.lockFile);
 		}
 	}
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see java.io.Closeable#close()
 	 */
+	@Override
 	public void close() throws IOException {
 
 		// stop POSTGRES
-		if (closed.getAndSet(true)) {
+		if (this.closed.getAndSet(true)) {
 			log.warn("Server already stopped");
 			return;
 		}
 		final StopWatch watch = new StopWatch();
 		watch.start();
 		try {
-			postgresController.pgCtl(postgresDirectory, dataDirectory, "stop",
+			this.postgresController.pgCtl(this.postgresDirectory, this.dataDirectory, "stop",
 					Arrays.asList("-m", PG_STOP_MODE, "-t", PG_STOP_WAIT_S, "-w"));
-			log.info("{} shut down postmaster in {}", instanceId, watch);
+			log.info("{} shut down postmaster in {}", this.instanceId, watch);
 		} catch (final Exception e) {
-			log.error("Could not stop postmaster " + instanceId, e);
+			log.error("Could not stop postmaster " + this.instanceId, e);
 		}
 		// unlock
-		if (lock != null) {
-			lock.release();
+		if (this.lock != null) {
+			this.lock.release();
 		}
 		try {
-			lockStream.close();
-		} catch (IOException e) {
+			this.lockStream.close();
+		} catch (final IOException e) {
 			log.error("while closing lockStream", e);
 		}
 
 		// clean data (if needed) TODO integrate property access in builder
-		if (cleanDataDirectoryAfterClosing && System.getProperty("pmp.no-cleanup") == null) {
+		if (this.cleanDataDirectoryAfterClosing && System.getProperty("pmp.no-cleanup") == null) {
 			try {
-				FileUtils.deleteDirectory(dataDirectory);
-			} catch (IOException e) {
-				log.error("Could not clean up directory {}", dataDirectory.getAbsolutePath());
+				FileUtils.deleteDirectory(this.dataDirectory);
+			} catch (final IOException e) {
+				log.error("Could not clean up directory {}", this.dataDirectory.getAbsolutePath());
 			}
 		} else {
-			log.info("Did not clean up directory {}", dataDirectory.getAbsolutePath());
+			log.info("Did not clean up directory {}", this.dataDirectory.getAbsolutePath());
 		}
 	}
 
